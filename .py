@@ -87,6 +87,7 @@ servers_config=load_data()
 intents=discord.Intents.default()
 intents.message_content=True
 intents.voice_states=True
+intents.reactions = True
 
 bot=commands.Bot(command_prefix="!",intents=intents)
 
@@ -475,7 +476,10 @@ class ConfigPlantillaView(discord.ui.View):
             await enviar_temporal(interaction, "✅ Plantilla guardada correctamente.")
 
             await asyncio.sleep(10)
-            await msg.delete()
+            try:
+                await msg.delete()
+            except discord.NotFound:
+                pass
 
         except asyncio.TimeoutError:
             await enviar_temporal(interaction, "❌ Tiempo agotado. No se subió ninguna plantilla.")
@@ -580,30 +584,44 @@ def detectar_area_blanca(imagen):
     return (x_min, y_min, x_max, y_max), mask
 
 @bot.event
+async def on_reaction_add(reaction, user):
+
+    guild = reaction.message.guild
+
+    if guild is None:
+        return
+
+    guild_id = str(guild.id)
+    config = servers_config[guild_id]
+
+    # solo canal de cargas
+    if reaction.message.channel.id != config["CANAL_CARGAS_ID"]:
+        return
+
+    # ignorar reacciones de usuarios (solo bots)
+    if not user.bot:
+        return
+
+    # ignorar reacción 🤖
+    ignorar_emojis = ["🤖", "⌛", "⏳"]
+    if str(reaction.emoji) in ignorar_emojis:
+        return
+
+    await reproducir_aviso(
+        guild,
+        config["CANAL_VOZ_ID"],
+        "Carga pendiente"
+    )
+
+@bot.event
 async def on_message(message):
 
-    if message.guild is None or message.author.bot:
+    if message.guild is None:
         return
     
     await bot.process_commands(message)
     guild_id = str(message.guild.id)
     config = servers_config[guild_id]
-
-    # LIMPIEZA CANAL AVISOS
-    if message.channel.id == config["CANAL_AVISOS_ID"]:
-
-        panel1 = config.get("panel_id")
-        panel2 = config.get("panel_plantilla_id")
-
-        if message.id not in (panel1, panel2):
-
-            try:
-                await asyncio.sleep(10)
-                await message.delete()
-            except:
-                pass
-
-    await bot.process_commands(message)
 
     # =========================
     # AVISO CANAL PREMIOS
@@ -611,27 +629,37 @@ async def on_message(message):
 
     if message.channel.id == config["CANAL_PREMIOS_ID"]:
 
-        await reproducir_aviso(
-            message.guild,
-            config["CANAL_VOZ_ID"],
-            "Premio en espera"
-        )
+        # solo bots y sin imagenes
+        if message.author.bot and not message.attachments:
 
-    # =========================
-    # AVISO CANAL CARGAS
-    # =========================
+            await reproducir_aviso(
+                message.guild,
+                config["CANAL_VOZ_ID"],
+                "Premio en espera"
+            )
 
-    if message.channel.id == config["CANAL_CARGAS_ID"]:
-        await reproducir_aviso(
-            message.guild,
-            config["CANAL_VOZ_ID"],
-            "Carga pendiente"
-        )
+    # LIMPIEZA CANAL AVISOS
+    if message.channel.id == config["CANAL_AVISOS_ID"]:
+
+        panel1 = config.get("panel_id")
+        panel2 = config.get("panel_plantilla_id")
+
+        # solo borrar mensajes de usuarios que no sean los paneles
+        if not message.author.bot and message.id not in (panel1, panel2):
+            
+            try:
+                await asyncio.sleep(10)
+                await message.delete()
+            except:
+                pass
 
     guild_id = str(message.guild.id)
     canal_premios_id = servers_config[guild_id].get("CANAL_PREMIOS_ID")
 
     if message.channel.id != canal_premios_id:
+        return
+    
+    if message.author.bot:
         return
 
     if message.attachments:
