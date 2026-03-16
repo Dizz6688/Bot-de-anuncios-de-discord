@@ -15,7 +15,8 @@ import os
 ARG_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 
 load_dotenv()
-print("recoleta")
+print("gualto")
+
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 DATA_FILE = "data.json"
