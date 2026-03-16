@@ -15,7 +15,6 @@ import os
 ARG_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 
 load_dotenv()
-print("gualto")
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
@@ -445,7 +444,10 @@ async def enviar_temporal(interaction, texto, segundos=10):
 
     await asyncio.sleep(segundos)
 
-    await msg.delete()
+    try:
+        await msg.delete()
+    except discord.NotFound:
+        pass
 
 class ConfigPlantillaView(discord.ui.View):
     def __init__(self, guild_id):
@@ -580,9 +582,10 @@ def detectar_area_blanca(imagen):
 @bot.event
 async def on_message(message):
 
-    if message.guild is None:
+    if message.guild is None or message.author.bot:
         return
-
+    
+    await bot.process_commands(message)
     guild_id = str(message.guild.id)
     config = servers_config[guild_id]
 
@@ -609,12 +612,8 @@ async def on_message(message):
     if message.channel.id == config["CANAL_PREMIOS_ID"]:
 
     # Solo aceptar mensajes enviados por bots
-        if not message.author.bot:
-            return
 
     # Ignorar completamente si el mensaje tiene imágenes o archivos
-        if message.attachments:
-            return
 
         await reproducir_aviso(
             message.guild,
