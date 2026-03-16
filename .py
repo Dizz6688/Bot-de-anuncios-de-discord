@@ -611,10 +611,6 @@ async def on_message(message):
 
     if message.channel.id == config["CANAL_PREMIOS_ID"]:
 
-    # Solo aceptar mensajes enviados por bots
-
-    # Ignorar completamente si el mensaje tiene imágenes o archivos
-
         await reproducir_aviso(
             message.guild,
             config["CANAL_VOZ_ID"],
