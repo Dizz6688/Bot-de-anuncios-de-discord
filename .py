@@ -565,24 +565,37 @@ async def actualizar_panel_plantilla(guild):
 # EVENTO PARA INSERTAR EL COMPROBANTE EN LA PLANTILLA
 # =============================
 
-def detectar_area_blanca(imagen):
+def detectar_area_transparente(imagen):
 
     img = np.array(imagen)
 
-    mask = (img[:,:,0] > 240) & (img[:,:,1] > 240) & (img[:,:,2] > 240)
+    # Verificar que tenga canal alpha
+    if img.shape[2] < 4:
+        return None, None, "La plantilla no tiene transparencia (debe ser PNG con fondo transparente)."
+
+    alpha = img[:, :, 3]
+
+    # zona transparente
+    mask = alpha == 0
 
     ys, xs = np.where(mask)
 
     if len(xs) == 0 or len(ys) == 0:
-        return None, None
+        return None, None, "No se encontró ninguna zona transparente en la plantilla."
 
     x_min = xs.min()
     x_max = xs.max()
     y_min = ys.min()
     y_max = ys.max()
 
-    return (x_min, y_min, x_max, y_max), mask
+    ancho = x_max - x_min
+    alto = y_max - y_min
 
+    # validar tamaño mínimo
+    if ancho < 50 or alto < 50:
+        return None, None, "La zona transparente es demasiado pequeña para colocar el comprobante."
+
+    return (x_min, y_min, x_max, y_max), mask, None
 @bot.event
 async def on_reaction_add(reaction, user):
 
@@ -676,12 +689,13 @@ async def on_message(message):
         comprobante_bytes = await message.attachments[0].read()
         comprobante = Image.open(io.BytesIO(comprobante_bytes)).convert("RGBA")
 
-        # detectar área blanca
-        area, mask = detectar_area_blanca(plantilla)
-        if area is None:    
-            await message.channel.send("❌ No se pudo detectar el área blanca en la plantilla.")
+        # detectar área transparente
+        area, mask, error = detectar_area_transparente(plantilla)
+        
+        if area is None:
+            await message.channel.send(f"⚠️ {error}")
             return
-
+        
         x1, y1, x2, y2 = area
         ancho = max(1, x2 - x1)
         alto = max(1, y2 - y1)
